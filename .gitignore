@@ -1,0 +1,91 @@
+# ---------------------------------------------------------------------------
+# Python-generated files
+# ---------------------------------------------------------------------------
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+sdist/
+wheels/
+share/python-wheels/
+*.egg-info/
+*.egg
+MANIFEST
+pip-wheel-metadata/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.pyright/
+cython_debug/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Virtual environments / interpreters
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# ---------------------------------------------------------------------------
+# Profiling output — regenerated locally by profiling/profile_baseline.py
+#   python3 profiling/profile_baseline.py --json profiling/baseline.json
+#   python3 -m cProfile -s tottime demo.py > profiling/demo_profile.txt
+#
+# Kept in version control (not ignored): the harness and the written report
+#   profiling/profile_baseline.py, profiling/BASELINE.md
+# ---------------------------------------------------------------------------
+profiling/baseline.json
+profiling/baseline.prof
+profiling/baseline_profile.txt
+profiling/baseline_run.txt
+profiling/demo_profile.txt
+profiling/tmp/
+profiling/*.tmp
+profiling/*.snapshot
+*.lprof
+*.pstats
+
+# ---------------------------------------------------------------------------
+# Editors / OS cruft
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
