@@ -25,6 +25,9 @@ class Batch:
     reserved : units set aside for customer orders, not yet fulfilled
     version  : availability version; when it changes, older heap entries
                for this batch become stale and are skipped (lazy deletion)
+    expired  : True once the batch has reached its sell_by date and has been
+               removed from sellable stock
+    holds    : order_id -> units of this batch reserved by that order
     """
 
     batch_id: str
@@ -34,3 +37,16 @@ class Batch:
     quantity: int
     reserved: int = 0
     version: int = 0
+    expired: bool = False
+    holds: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def available(self) -> int:
+        """Sellable units: not reserved and not expired. O(1)."""
+        return 0 if self.expired else self.quantity - self.reserved
+
+
+def check_quantity(quantity: int) -> None:
+    """Raise ValueError unless quantity is a positive whole number."""
+    if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity <= 0:
+        raise ValueError(f"Quantity must be a positive whole number, got {quantity!r}")
