@@ -10,9 +10,17 @@ Data structures we planned
 
 import itertools
 from datetime import date, timedelta
+from typing import TypedDict
 
-from batch import Batch
+from batch import Batch, check_quantity
 from heap_manager import HeapManager
+
+
+class ExpiryReport(TypedDict):
+    batch_id: str
+    sku: str
+    sell_by: date
+    orders: dict[str, int]
 
 
 class Inventory:
@@ -25,6 +33,7 @@ class Inventory:
         self.heaps = HeapManager()
         self.available_by_sku: dict[str, int] = {}
         self.orders: dict[str, dict[str, int]] = {}
+        self._pending_expiry_reports: list[ExpiryReport] = []
 
         # Global counter, so a deleted-then-reinserted batch ID never reuses
         # an old version number (old heap entries stay stale).
@@ -35,6 +44,14 @@ class Inventory:
     def lots_by_sku(self):
         return self.heaps.lots_by_sku
 
+    @property
+    def expiry_events(self):
+        return self.heaps.expiry_events
+
+    def new_version(self) -> int:
+        """Return a version that cannot match any earlier heap entry."""
+        return next(self._versions)
+
     # ============================================================ insert
     def insert_batch(self, batch_id: str, sku: str, quantity: int,
                      expiry: date, today: date) -> Batch:
@@ -43,17 +60,48 @@ class Inventory:
         Rejects duplicate IDs, non-positive quantities, and batches that are
         already at or past their sell_by date.
         """
-       
+        if batch_id in self.batches_by_id:
+            raise ValueError(f"Batch {batch_id} already exists")
+        check_quantity(quantity)
+
         sell_by = expiry - self.expiry_buffer
         if sell_by <= today:
             raise ValueError(f"Batch {batch_id} cannot be sold: sell-by date {sell_by} has passed")
 
         batch = Batch(batch_id, sku, expiry, sell_by, quantity,
-                      version=next(self._versions))
+                      version=self.new_version())
         self.batches_by_id[batch_id] = batch
         self.heaps.add_batch(batch)
         self.available_by_sku[sku] = self.available_by_sku.get(sku, 0) + quantity
         return batch
+
+    def available(self, sku: str, today: date) -> int:
+        """Return sellable stock for a SKU after expiring due batches."""
+        self.expire_due(today)
+        return self.available_by_sku.get(sku, 0)
+
+    def expire_due(self, today: date) -> list[Batch]:
+        """Mark due batches unsellable and retain reports until collected."""
+        due_batches = self.heaps.pop_due(today, self.batches_by_id)
+        for batch in due_batches:
+            self.available_by_sku[batch.sku] -= batch.available
+            batch.expired = True
+            batch.version = self.new_version()
+            if batch.quantity > 0:
+                self._pending_expiry_reports.append({
+                    "batch_id": batch.batch_id,
+                    "sku": batch.sku,
+                    "sell_by": batch.sell_by,
+                    "orders": dict(batch.holds),
+                })
+        return due_batches
+
+    def process_expired(self, today: date) -> list[ExpiryReport]:
+        """Expire due batches and return uncollected reconciliation reports."""
+        self.expire_due(today)
+        reports = self._pending_expiry_reports
+        self._pending_expiry_reports = []
+        return reports
 
     # search
     def search_batch(self, batch_id: str) -> Batch | None:
@@ -75,7 +123,7 @@ class Inventory:
         if batch.reserved > 0:
             raise ValueError(
                 f"Batch {batch_id} has reservations, cancel them first")
-        self.available_by_sku[batch.sku] -= batch.quantity - batch.reserved
+        self.available_by_sku[batch.sku] -= batch.available
         del self.batches_by_id[batch_id]
         return batch
 
