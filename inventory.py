@@ -10,6 +10,7 @@ Data structures we planned
 
 import itertools
 from datetime import date, timedelta
+from heapq import heappush, nsmallest
 from typing import TypedDict
 
 from batch import Batch, check_quantity
@@ -36,7 +37,21 @@ class Inventory:
     This class owns the canonical batch dictionary, product availability totals,
     and expiry management logic. It acts as the main coordinator between batch
     records and the heap-based expiry system.
+
+    __slots__ is a performance choice: the attribute lookups in the read-heavy
+    paths (available, search_batch, top_k_expiring) cost measurably less than
+    instance-dictionary lookups, and an Inventory never needs extra attributes.
     """
+
+    __slots__ = (
+        "expiry_buffer",
+        "batches_by_id",
+        "heaps",
+        "available_by_sku",
+        "orders",
+        "_pending_expiry_reports",
+        "_versions",
+    )
 
     def __init__(self, expiry_buffer_days: int = 3) -> None:
         """Initialize the inventory and configure the expiry safety buffer.
@@ -91,9 +106,16 @@ class Inventory:
 
         Rejects duplicate IDs, non-positive quantities, and batches that are
         already at or past their sell_by date.
+
+        Hot path, so the heap entries are pushed inline instead of going through
+        HeapManager.add_batch: one call frame and one setdefault lookup per
+        insert are saved.  add_batch remains the public helper and builds the
+        identical (date, batch_id, version) tuples.
         """
+        batches = self.batches_by_id
+
         # A batch ID must be unique; duplicate IDs would cause overwriting data.
-        if batch_id in self.batches_by_id:
+        if batch_id in batches:
             raise ValueError(f"Batch {batch_id} already exists")
 
         # Validate the quantity is a valid positive amount.
@@ -106,16 +128,22 @@ class Inventory:
 
         # Build the batch with a unique version to keep stale heap records from
         # matching active entries after an update or deletion.
-        batch = Batch(batch_id, sku, expiry, sell_by, quantity,
-                      version=self.new_version())
+        version = next(self._versions)
+        batch = Batch(batch_id, sku, expiry, sell_by, quantity, version=version)
 
         # Add the batch to the authoritative store and the heap-based expiry
         # structures used for FEFO ordering and expiration checks.
-        self.batches_by_id[batch_id] = batch
-        self.heaps.add_batch(batch)
+        batches[batch_id] = batch
+        heaps = self.heaps
+        lot = heaps.lots_by_sku.get(sku)
+        if lot is None:
+            heaps.lots_by_sku[sku] = lot = []
+        heappush(lot, (expiry, batch_id, version))
+        heappush(heaps.expiry_events, (sell_by, batch_id, version))
 
         # Increase stock available for the SKU by the full batch quantity.
-        self.available_by_sku[sku] = self.available_by_sku.get(sku, 0) + quantity
+        available = self.available_by_sku
+        available[sku] = available.get(sku, 0) + quantity
         return batch
 
     def available(self, sku: str, today: date) -> int:
@@ -198,26 +226,28 @@ class Inventory:
 
         Read-only: does not modify inventory or heaps.
         Ties are broken by batch ID.
-        Time complexity: O(n log n).
+        Time complexity: O(n log k) — bounded selection, not a full sort.
         """
-
         if not isinstance(k, int) or isinstance(k, bool) or k < 0:
             raise ValueError("k must be a non-negative integer")
+        if k == 0:
+            return []
 
-        # Filter eligible batches without changing inventory state.
-        eligible = [
-            batch
-            for batch in self.batches_by_id.values()
-            if batch.sell_by > today
-            and not batch.expired
-            and batch.quantity - batch.reserved > 0
-        ]
-
-        # Sort by earliest expiration, then batch ID.
-        eligible.sort(key=lambda batch: (batch.expiry, batch.batch_id))
-
-        # Return only the first k batches.
-        return eligible[:k]
+        # Bounded selection instead of "build the list, sort it, slice it":
+        # heapq.nsmallest keeps a max-heap of at most k candidates, so the cost
+        # is O(n log k) instead of O(n log n), and no Python sort key is called
+        # once per batch.  (expiry, batch_id) is unique per batch because batch
+        # IDs are unique, so the Batch object never takes part in a comparison.
+        return [batch for _, _, batch in nsmallest(
+            k,
+            [
+                (batch.expiry, batch.batch_id, batch)
+                for batch in self.batches_by_id.values()
+                if batch.sell_by > today
+                and not batch.expired
+                and batch.quantity > batch.reserved
+            ],
+        )]
 
 
 # testing inventory operations
