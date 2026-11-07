@@ -57,6 +57,14 @@ def main() -> None:
             f"expiry={batch.expiry} "
             f"sell_by={batch.sell_by}"
         )
+    print("\n=== Top 5 Expiring Batches (Nov 1) ===")
+
+    for batch in inv.top_k_expiring(5, nov1):
+        print(
+            f"{batch.batch_id}: {batch.sku:10} "
+            f"expiry={batch.expiry} "
+            f"available={batch.available}"
+        )
 
     # 2. Check available milk -> 50
     show(nov1, f"Available milk: {inv.available('milk', nov1)}")        #check available milk
@@ -71,7 +79,7 @@ def main() -> None:
     try:
         reserve(inv, "ORD-2", "milk", 95, nov1)      # in case of insufficient stock
     except ValueError as e:
-        show(nov1, f"ORD-2 (45 milk) rejected: {e}")
+        show(nov1, f"ORD-2 (95 milk) rejected: {e}")
 
     # 5. Process expiration on Nov 7 -> B101 removed, ORD-1 flagged
     report = inv.process_expired(nov7)

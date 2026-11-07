@@ -193,6 +193,31 @@ class Inventory:
         # are ignored later during heap cleanup.
         del self.batches_by_id[batch_id]
         return batch
+    def top_k_expiring(self, k: int, today: date) -> list[Batch]:
+        """Return the k earliest-expiring sellable batches store-wide.
+
+        Read-only: does not modify inventory or heaps.
+        Ties are broken by batch ID.
+        Time complexity: O(n log n).
+        """
+
+        if not isinstance(k, int) or isinstance(k, bool) or k < 0:
+            raise ValueError("k must be a non-negative integer")
+
+        # Filter eligible batches without changing inventory state.
+        eligible = [
+            batch
+            for batch in self.batches_by_id.values()
+            if batch.sell_by > today
+            and not batch.expired
+            and batch.quantity - batch.reserved > 0
+        ]
+
+        # Sort by earliest expiration, then batch ID.
+        eligible.sort(key=lambda batch: (batch.expiry, batch.batch_id))
+
+        # Return only the first k batches.
+        return eligible[:k]
 
 
 # testing inventory operations
