@@ -31,6 +31,32 @@ def main() -> None:
     b102 = inv.insert_batch("B102", "milk", 30, expiry=d(15), today=nov1)  # insert batch B102
     show(nov1, f"Inserted B101: 20 milk, expires {b101.expiry:%b %d}, sell-by {b101.sell_by:%b %d}")
     show(nov1, f"Inserted B102: 30 milk, expires {b102.expiry:%b %d}, sell-by {b102.sell_by:%b %d}")
+    # Additional products for store-wide expiration ranking
+    b103 = inv.insert_batch("B103", "bread", 40, expiry=d(10), today=nov1)
+    b104 = inv.insert_batch("B104", "eggs", 60, expiry=d(12), today=nov1)
+    b105 = inv.insert_batch("B105", "yogurt", 25, expiry=d(9), today=nov1)
+    # Additional grocery inventory
+    inv.insert_batch("B106", "milk", 50, expiry=d(20), today=nov1)
+    inv.insert_batch("B107", "bread", 30, expiry=d(14), today=nov1)
+    inv.insert_batch("B108", "eggs", 100, expiry=d(25), today=nov1)
+    inv.insert_batch("B109", "cheese", 45, expiry=d(18), today=nov1)
+    inv.insert_batch("B110", "butter", 35, expiry=d(22), today=nov1)
+    inv.insert_batch("B111", "spinach", 25, expiry=d(8), today=nov1)
+    inv.insert_batch("B112", "tomatoes", 80, expiry=d(11), today=nov1)
+    inv.insert_batch("B113", "potatoes", 120, expiry=d(28), today=nov1)
+    inv.insert_batch("B114", "yogurt", 40, expiry=d(16), today=nov1)
+    inv.insert_batch("B115", "apples", 70, expiry=d(24), today=nov1)
+
+    print("\n=== Store-wide inventory ===")
+
+    for batch in inv.batches_by_id.values():
+        print(
+            f"{batch.batch_id}: "
+            f"{batch.sku:10} "
+            f"qty={batch.quantity:3} "
+            f"expiry={batch.expiry} "
+            f"sell_by={batch.sell_by}"
+        )
 
     # 2. Check available milk -> 50
     show(nov1, f"Available milk: {inv.available('milk', nov1)}")        #check available milk
@@ -43,7 +69,7 @@ def main() -> None:
 
     # Unusual case: all-or-nothing rejection
     try:
-        reserve(inv, "ORD-2", "milk", 45, nov1)         # in case of insufficient stock
+        reserve(inv, "ORD-2", "milk", 95, nov1)      # in case of insufficient stock
     except ValueError as e:
         show(nov1, f"ORD-2 (45 milk) rejected: {e}")
 
